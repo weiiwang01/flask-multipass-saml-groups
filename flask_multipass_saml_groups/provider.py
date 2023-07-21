@@ -3,7 +3,7 @@
 #
 """SAML Groups Identity Provider."""
 import operator
-from typing import Dict, Iterable, Optional
+from typing import Dict, Iterable, Iterator, Optional
 
 from flask_multipass import (
     AuthInfo,
@@ -44,15 +44,15 @@ class SAMLGroup(Group):
         """
         self._members[identity_info.identifier] = identity_info
 
-    def get_members(self) -> Iterable[IdentityInfo]:
+    def get_members(self) -> Iterator[IdentityInfo]:
         """Return the members of the group.
 
         This can also be performed by iterating over the group.
 
         Returns:
-            An iterable of IdentityInfo objects.
+            An iterator of IdentityInfo objects.
         """
-        return self._members.values()
+        return iter(self._members.values())
 
     def has_member(self, identifier) -> bool:
         """Check if a given identity is a member of the group.
