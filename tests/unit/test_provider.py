@@ -7,7 +7,11 @@ from flask import Flask
 from flask_multipass import AuthInfo, IdentityRetrievalFailed, Multipass
 from werkzeug.datastructures import MultiDict
 
-from src.saml_groups_provider import SAML_GRP_ATTR_NAME, SAMLGroupsIdentityProvider
+from src.saml_groups_provider import (
+    DEFAULT_IDENTIFIER_FIELD,
+    SAML_GRP_ATTR_NAME,
+    SAMLGroupsIdentityProvider,
+)
 
 USER_EMAIL = "user@example.com"
 OTHER_USER_EMAIL = "other@example.com"
@@ -19,7 +23,7 @@ OTHER_GRP_NAME = "other"
 def saml_attrs_fixture():
     return {
         "_saml_nameid": USER_EMAIL,
-        "_saml_nameid_qualified": f"{USER_EMAIL}@https://site",
+        DEFAULT_IDENTIFIER_FIELD: f"{USER_EMAIL}@https://site",
         "email": USER_EMAIL,
         "fullname": "Foo bar",
         "openid": "https://openid",
@@ -33,7 +37,7 @@ def saml_attrs_fixture():
 def saml_attrs_other_user_fixture():
     return {
         "_saml_nameid": OTHER_USER_EMAIL,
-        "_saml_nameid_qualified": f"{OTHER_USER_EMAIL}@https://site",
+        DEFAULT_IDENTIFIER_FIELD: f"{OTHER_USER_EMAIL}@https://site",
         "email": OTHER_USER_EMAIL,
         "fullname": "Foo bar",
         "openid": "https://openid",
@@ -84,7 +88,7 @@ def test_get_identity_from_auth_returns_identity_info(provider, auth_info, saml_
 
     assert identity_info is not None
     assert identity_info.provider == provider
-    assert identity_info.identifier == auth_info.data["_saml_nameid_qualified"]
+    assert identity_info.identifier == auth_info.data[DEFAULT_IDENTIFIER_FIELD]
     assert identity_info.data == MultiDict(saml_attrs)
 
 
@@ -139,7 +143,7 @@ def test_get_identity_from_auth_raises_exc_for_no_identifier(auth_info, provider
     assert: an exception is raised
     """
 
-    del auth_info.data["_saml_nameid_qualified"]
+    del auth_info.data[DEFAULT_IDENTIFIER_FIELD]
 
     with pytest.raises(IdentityRetrievalFailed):
         provider.get_identity_from_auth(auth_info)
@@ -154,9 +158,14 @@ def test_get_identity_from_auth_adds_user_to_group(auth_info, provider):
     provider.get_identity_from_auth(auth_info)
 
     group = provider.get_group(GRP_NAME)
-    assert group.get_members() == [auth_info.identifier]
+    members = list(group.get_members())
+    assert members
+    assert members[0].identifier == auth_info.data[DEFAULT_IDENTIFIER_FIELD]
+
     group = provider.get_group(OTHER_GRP_NAME)
-    assert group.get_members() == [auth_info.identifier]
+    members = list(group.get_members())
+    assert members
+    assert members[0].identifier == auth_info.data[DEFAULT_IDENTIFIER_FIELD]
 
 
 def test_get_identity_from_auth_adds_user_to_existing_group(
@@ -171,9 +180,15 @@ def test_get_identity_from_auth_adds_user_to_existing_group(
     provider.get_identity_from_auth(auth_info_other_user)
 
     group = provider.get_group(GRP_NAME)
-    assert group.get_members() == [auth_info.identifier]
+    members = list(group.get_members())
+    assert members
+    assert members[0].identifier == auth_info.data[DEFAULT_IDENTIFIER_FIELD]
+
     group = provider.get_group(OTHER_GRP_NAME)
-    assert group.get_members() == [auth_info.identifier, auth_info_other_user.identifier]
+    members = list(group.get_members())
+    assert len(members) == 2
+    assert members[0].identifier == auth_info.data[DEFAULT_IDENTIFIER_FIELD]
+    assert members[1].identifier == auth_info_other_user.data[DEFAULT_IDENTIFIER_FIELD]
 
 
 def test_get_group_returns_specific_group(auth_info, provider):

@@ -14,6 +14,8 @@ from flask_multipass import (
     Multipass,
 )
 
+DEFAULT_IDENTIFIER_FIELD = "_saml_nameid_qualified"
+
 SAML_GRP_ATTR_NAME = "urn:oasis:names:tc:SAML:2.0:profiles:attribute:DCE:groups"
 
 
@@ -22,24 +24,46 @@ class SAMLGroup(Group):
 
     supports_member_list = True
 
-    def get_members(self):
+    def __init__(self, provider: IdentityProvider, name: str):
+        """Provide the group.
+
+        Args:
+            provider: The associated identity provider
+            name: The name of this group
+        """
+        super().__init__(provider, name)
+        self.provider = provider
+        self.name = name
+        self._members: Dict[str:IdentityProvider] = dict()
+
+    def add_member(self, identity_info: IdentityInfo):
+        """Add a member to the group.
+
+        Args:
+            identity_info: The identity_info provided by the associated identity provider.
+        """
+        self._members[identity_info.identifier] = identity_info
+
+    def get_members(self) -> Iterable[IdentityInfo]:
         """Return the members of the group.
 
         This can also be performed by iterating over the group.
 
         Returns:
-            An iterable of :class:`.IdentityInfo` objects.
+            An iterable of IdentityInfo objects.
         """
-        raise NotImplementedError
+        return self._members.values()
 
-    def has_member(self, identifier):
+    def has_member(self, identifier) -> bool:
         """Check if a given identity is a member of the group.
 
+        This check can also be performed using the ``in`` operator.
+
         Args:
-             identifier: The `identifier` from an :class:`.IdentityInfo`
-                           provided by the associated identity provider.
+             identifier: The identifier from an IdentityInfo
+                         provided by the associated identity provider.
         """
-        return False
+        return identifier in self._members
 
 
 class SAMLGroupsIdentityProvider(IdentityProvider):
@@ -61,7 +85,7 @@ class SAMLGroupsIdentityProvider(IdentityProvider):
                              provider instance
         """
         super().__init__(multipass=multipass, name=name, settings=settings)
-        self.id_field = self.settings.setdefault("identifier_field", "_saml_nameid_qualified")
+        self.id_field = self.settings.setdefault("identifier_field", DEFAULT_IDENTIFIER_FIELD)
         self._groups = dict()
 
     def get_identity_from_auth(self, auth_info: AuthInfo) -> IdentityInfo:
@@ -83,12 +107,16 @@ class SAMLGroupsIdentityProvider(IdentityProvider):
         if not identifier:
             raise IdentityRetrievalFailed("Identifier missing in saml response", provider=self)
 
+        identity_info = IdentityInfo(self, identifier=identifier, **auth_info.data)
+
         groups = auth_info.data.get(SAML_GRP_ATTR_NAME)
         if groups:
             for g in groups:
                 if g not in self._groups:
                     self._groups[g] = self.group_class(provider=self, name=g)
-        return IdentityInfo(self, identifier=identifier, **auth_info.data)
+                self._groups[g].add_member(identity_info)
+
+        return identity_info
 
     def get_group(self, name: str) -> Optional[SAMLGroup]:
         """
