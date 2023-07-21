@@ -7,7 +7,7 @@ from flask import Flask
 from flask_multipass import AuthInfo, IdentityRetrievalFailed, Multipass
 from werkzeug.datastructures import MultiDict
 
-from src.saml_groups_provider import (
+from flask_multipass_saml_groups.provider import (
     DEFAULT_IDENTIFIER_FIELD,
     SAML_GRP_ATTR_NAME,
     SAMLGroupsIdentityProvider,

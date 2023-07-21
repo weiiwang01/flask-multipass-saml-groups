@@ -1,12 +1,11 @@
 #  Copyright 2023 Canonical Ltd.
 #  See LICENSE file for licensing details.
-from unittest.mock import Mock
 
 import pytest
 from flask import Flask
 from flask_multipass import IdentityInfo, Multipass
 
-from src.saml_groups_provider import SAMLGroup, SAMLGroupsIdentityProvider
+from flask_multipass_saml_groups.provider import SAMLGroup, SAMLGroupsIdentityProvider
 
 USER_IDENTIFIER = "email@email.com"
 OTHER_USER_IDENTIFIER = "other@other.com"
