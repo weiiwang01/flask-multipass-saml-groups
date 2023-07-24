@@ -7,6 +7,7 @@ from flask import Flask
 from flask_multipass import AuthInfo, IdentityRetrievalFailed, Multipass
 from werkzeug.datastructures import MultiDict
 
+from flask_multipass_saml_groups.group_provider import db
 from flask_multipass_saml_groups.provider import (
     DEFAULT_IDENTIFIER_FIELD,
     SAML_GRP_ATTR_NAME,
@@ -33,6 +34,20 @@ def saml_attrs_fixture():
     }
 
 
+@pytest.fixture(name="saml_attrs_grp_removed")
+def saml_attrs_grp_removed_fixture():
+    return {
+        "_saml_nameid": USER_EMAIL,
+        DEFAULT_IDENTIFIER_FIELD: f"{USER_EMAIL}@https://site",
+        "email": USER_EMAIL,
+        "fullname": "Foo bar",
+        "openid": "https://openid",
+        "userid": USER_EMAIL,
+        "username": "user",
+        SAML_GRP_ATTR_NAME: [OTHER_GRP_NAME],
+    }
+
+
 @pytest.fixture(name="saml_attrs_other_user")
 def saml_attrs_other_user_fixture():
     return {
@@ -52,6 +67,11 @@ def auth_info_fixture(saml_attrs):
     return AuthInfo(provider=Mock(), **saml_attrs)
 
 
+@pytest.fixture(name="auth_info_grp_removed")
+def auth_info_grp_removed_fixture(saml_attrs_grp_removed):
+    return AuthInfo(provider=Mock(), **saml_attrs_grp_removed)
+
+
 @pytest.fixture(name="auth_info_other_user")
 def auth_info_other_user_fixture(saml_attrs_other_user):
     return AuthInfo(provider=Mock(), **saml_attrs_other_user)
@@ -60,21 +80,27 @@ def auth_info_other_user_fixture(saml_attrs_other_user):
 @pytest.fixture(name="provider")
 def provider_fixture():
     app = Flask("test")
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
+
     multipass = Multipass(app)
     with app.app_context():
+        db.init_app(app)
         provider = SAMLGroupsIdentityProvider(multipass=multipass, name="saml_groups", settings={})
-    return provider
+        yield provider
 
 
 @pytest.fixture(name="provider_custom_field")
 def provider_custom_field_fixture():
     app = Flask("test")
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
+
     multipass = Multipass(app)
     with app.app_context():
+        db.init_app(app)
         provider = SAMLGroupsIdentityProvider(
             multipass=multipass, name="saml_groups", settings=dict(identifier_field="fullname")
         )
-    return provider
+        yield provider
 
 
 def test_get_identity_from_auth_returns_identity_info(provider, auth_info, saml_attrs):
@@ -189,6 +215,33 @@ def test_get_identity_from_auth_adds_user_to_existing_group(
     assert len(members) == 2
     assert members[0].identifier == auth_info.data[DEFAULT_IDENTIFIER_FIELD]
     assert members[1].identifier == auth_info_other_user.data[DEFAULT_IDENTIFIER_FIELD]
+
+
+def test_get_identity_from_auth_removes_user_from_group(
+    auth_info, auth_info_grp_removed, provider
+):
+    """
+    arrange: given AuthInfo by AuthProvider
+    act: call get_identity_from_auth from SAMLGroupsIdentityProvider and afterwards again with a group removed
+    assert: the user is removed from the group
+    """
+    provider.get_identity_from_auth(auth_info)
+
+    group = provider.get_group(GRP_NAME)
+    members = list(group.get_members())
+    assert members
+    assert members[0].identifier == auth_info.data[DEFAULT_IDENTIFIER_FIELD]
+
+    provider.get_identity_from_auth(auth_info_grp_removed)
+
+    group = provider.get_group(GRP_NAME)
+    members = list(group.get_members())
+    assert not members
+
+    group = provider.get_group(OTHER_GRP_NAME)
+    members = list(group.get_members())
+    assert members
+    assert members[0].identifier == auth_info.data[DEFAULT_IDENTIFIER_FIELD]
 
 
 def test_get_group_returns_specific_group(auth_info, provider):

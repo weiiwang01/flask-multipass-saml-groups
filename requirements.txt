@@ -1,2 +1,3 @@
 flask-multipass>=0.4.*
-
+python3-saml
+flask_sqlalchemy
