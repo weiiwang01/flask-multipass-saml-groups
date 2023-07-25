@@ -7,7 +7,6 @@ from flask import Flask
 from flask_multipass import AuthInfo, IdentityRetrievalFailed, Multipass
 from werkzeug.datastructures import MultiDict
 
-from flask_multipass_saml_groups.group_provider import db
 from flask_multipass_saml_groups.provider import (
     DEFAULT_IDENTIFIER_FIELD,
     SAML_GRP_ATTR_NAME,
@@ -78,13 +77,14 @@ def auth_info_other_user_fixture(saml_attrs_other_user):
 
 
 @pytest.fixture(name="provider")
-def provider_fixture():
+def provider_fixture(db):
     app = Flask("test")
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
 
     multipass = Multipass(app)
-    with app.app_context():
+    with app.app_context(db):
         db.init_app(app)
+        db.create_all()
         provider = SAMLGroupsIdentityProvider(multipass=multipass, name="saml_groups", settings={})
         yield provider
 

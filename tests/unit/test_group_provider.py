@@ -6,9 +6,10 @@ from unittest.mock import Mock
 import pytest
 from flask import Flask
 from flask_multipass import IdentityProvider, Multipass
+from indico.core.db import db
 
 from flask_multipass_saml_groups.group_provider import DBGroup as Group
-from flask_multipass_saml_groups.group_provider import SAMLGroup, SQLGroupProvider, User, db
+from flask_multipass_saml_groups.group_provider import SAMLGroup, SAMLUser, SQLGroupProvider
 
 USER_IDENTIFIER = "user1"
 OTHER_USER_IDENTIFIER = "user2"
@@ -31,14 +32,14 @@ def group_provider_fixture():
                 multipass=multipass, name="saml_groups", settings={}
             ),
         )
-        u1 = User(identifier=USER_IDENTIFIER)
+        u1 = SAMLUser(identifier=USER_IDENTIFIER)
         db.session.add(u1)
-        u2 = User(identifier=OTHER_USER_IDENTIFIER)
+        u2 = SAMLUser(identifier=OTHER_USER_IDENTIFIER)
         db.session.add(u2)
-        g1 = Group(name=GRP_NAME)
+        g1 = SAMLGroup(name=GRP_NAME)
         g1.members.append(u1)
         db.session.add(g1)
-        db.session.add(Group(name=OTHER_GRP_NAME))
+        db.session.add(SAMLGroup(name=OTHER_GRP_NAME))
         db.session.commit()
 
     return gp
