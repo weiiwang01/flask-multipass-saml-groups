@@ -7,6 +7,7 @@ from flask import Flask
 from flask_multipass import AuthInfo, IdentityRetrievalFailed, Multipass
 from werkzeug.datastructures import MultiDict
 
+from flask_multipass_saml_groups.group_provider.dummy import DummyGroupProvider
 from flask_multipass_saml_groups.provider import (
     DEFAULT_IDENTIFIER_FIELD,
     SAML_GRP_ATTR_NAME,
@@ -77,16 +78,17 @@ def auth_info_other_user_fixture(saml_attrs_other_user):
 
 
 @pytest.fixture(name="provider")
-def provider_fixture(db):
+def provider_fixture():
     app = Flask("test")
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
-
     multipass = Multipass(app)
-    with app.app_context(db):
-        db.init_app(app)
-        db.create_all()
-        provider = SAMLGroupsIdentityProvider(multipass=multipass, name="saml_groups", settings={})
-        yield provider
+
+    with app.app_context():
+        yield SAMLGroupsIdentityProvider(
+            multipass=multipass,
+            name="saml_groups",
+            settings={},
+            group_provider_class=DummyGroupProvider,
+        )
 
 
 @pytest.fixture(name="provider_custom_field")
@@ -95,12 +97,14 @@ def provider_custom_field_fixture():
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
 
     multipass = Multipass(app)
+
     with app.app_context():
-        db.init_app(app)
-        provider = SAMLGroupsIdentityProvider(
-            multipass=multipass, name="saml_groups", settings=dict(identifier_field="fullname")
+        yield SAMLGroupsIdentityProvider(
+            multipass=multipass,
+            name="saml_groups",
+            settings=dict(identifier_field="fullname"),
+            group_provider_class=DummyGroupProvider,
         )
-        yield provider
 
 
 def test_get_identity_from_auth_returns_identity_info(provider, auth_info, saml_attrs):
@@ -213,8 +217,12 @@ def test_get_identity_from_auth_adds_user_to_existing_group(
     group = provider.get_group(OTHER_GRP_NAME)
     members = list(group.get_members())
     assert len(members) == 2
-    assert members[0].identifier == auth_info.data[DEFAULT_IDENTIFIER_FIELD]
-    assert members[1].identifier == auth_info_other_user.data[DEFAULT_IDENTIFIER_FIELD]
+    expected_identifiers = {
+        auth_info.data[DEFAULT_IDENTIFIER_FIELD],
+        auth_info_other_user.data[DEFAULT_IDENTIFIER_FIELD],
+    }
+    assert members[0].identifier in expected_identifiers
+    assert members[1].identifier in expected_identifiers
 
 
 def test_get_identity_from_auth_removes_user_from_group(

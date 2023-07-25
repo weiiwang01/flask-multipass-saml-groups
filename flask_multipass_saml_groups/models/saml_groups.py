@@ -38,7 +38,7 @@ class SAMLUser(db.Model):
     __tablename__ = "saml_users"
 
     id = db.Column(db.Integer, primary_key=True)
-    identifier = db.Column(db.String, nullable=False, index=True, unique=True)
+    identifier = db.Column(db.String, nullable=False, unique=True, index=True)
     groups: Mapped[List[SAMLGroup]] = db.relationship(
         SAMLGroup,
         secondary=group_members_table,

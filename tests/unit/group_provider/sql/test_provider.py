@@ -8,8 +8,9 @@ from flask import Flask
 from flask_multipass import IdentityProvider, Multipass
 from indico.core.db import db
 
-from flask_multipass_saml_groups.group_provider import DBGroup as Group
-from flask_multipass_saml_groups.group_provider import SAMLGroup, SAMLUser, SQLGroupProvider
+from flask_multipass_saml_groups.group_provider.sql import SQLGroup, SQLGroupProvider
+from flask_multipass_saml_groups.models.saml_groups import SAMLGroup as DBGroup
+from flask_multipass_saml_groups.models.saml_groups import SAMLUser, group_members_table
 
 USER_IDENTIFIER = "user1"
 OTHER_USER_IDENTIFIER = "user2"
@@ -20,14 +21,10 @@ NOT_EXISTING_GRP_NAME = "not_existing"
 
 
 @pytest.fixture(name="group_provider")
-def group_provider_fixture():
-    app = Flask(__name__)
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
+def group_provider_fixture(app):
     with app.app_context():
-        db.init_app(app)
         multipass = Multipass(app=app)
         gp = SQLGroupProvider(
-            app=app,
             identity_provider=IdentityProvider(
                 multipass=multipass, name="saml_groups", settings={}
             ),
@@ -36,23 +33,23 @@ def group_provider_fixture():
         db.session.add(u1)
         u2 = SAMLUser(identifier=OTHER_USER_IDENTIFIER)
         db.session.add(u2)
-        g1 = SAMLGroup(name=GRP_NAME)
+        g1 = DBGroup(name=GRP_NAME)
         g1.members.append(u1)
         db.session.add(g1)
-        db.session.add(SAMLGroup(name=OTHER_GRP_NAME))
+        db.session.add(DBGroup(name=OTHER_GRP_NAME))
         db.session.commit()
 
-    return gp
+        yield gp
 
 
 def test_get_group(group_provider):
     """
     arrange: given a GroupProvider instance
     act: call get_group with a specific group name
-    assert: returns a SAMLGroup instance with the same name
+    assert: returns a SQLGroup instance with the same name
     """
     grp = group_provider.get_group(GRP_NAME)
-    assert isinstance(grp, SAMLGroup)
+    assert isinstance(grp, SQLGroup)
     assert grp.name == GRP_NAME
 
 
@@ -119,7 +116,7 @@ def test_add_group(group_provider):
     """
     group_provider.add_group(NOT_EXISTING_GRP_NAME)
     grp = group_provider.get_group(NOT_EXISTING_GRP_NAME)
-    assert isinstance(grp, SAMLGroup)
+    assert isinstance(grp, SQLGroup)
     assert grp.name == NOT_EXISTING_GRP_NAME
 
 
@@ -133,7 +130,7 @@ def test_add_group_group_already_existing(group_provider):
     group_provider.add_group(NOT_EXISTING_GRP_NAME)
 
     grp = group_provider.get_group(NOT_EXISTING_GRP_NAME)
-    assert isinstance(grp, SAMLGroup)
+    assert isinstance(grp, SQLGroup)
     assert grp.name == NOT_EXISTING_GRP_NAME
 
 
@@ -145,7 +142,7 @@ def test_add_group_member(group_provider):
     """
     group_provider.add_group_member(USER_IDENTIFIER, OTHER_GRP_NAME)
     grp = group_provider.get_group(OTHER_GRP_NAME)
-    assert isinstance(grp, SAMLGroup)
+    assert isinstance(grp, SQLGroup)
     assert grp.name == OTHER_GRP_NAME
     members = list(grp.get_members())
     assert len(members) == 1
@@ -160,7 +157,7 @@ def test_add_group_member_user_non_existing(group_provider):
     """
     group_provider.add_group_member(NOT_EXISTING_USER_IDENTIFIER, OTHER_GRP_NAME)
     grp = group_provider.get_group(OTHER_GRP_NAME)
-    assert isinstance(grp, SAMLGroup)
+    assert isinstance(grp, SQLGroup)
     assert grp.name == OTHER_GRP_NAME
     members = list(grp.get_members())
     assert len(members) == 1
@@ -175,7 +172,7 @@ def test_add_group_member_group_non_existing(group_provider):
     """
     group_provider.add_group_member(USER_IDENTIFIER, NOT_EXISTING_GRP_NAME)
     grp = group_provider.get_group(NOT_EXISTING_GRP_NAME)
-    assert isinstance(grp, SAMLGroup)
+    assert isinstance(grp, SQLGroup)
     assert grp.name == NOT_EXISTING_GRP_NAME
     members = list(grp.get_members())
     assert len(members) == 1
@@ -192,7 +189,7 @@ def test_add_group_member_pair_already_existing(group_provider):
     group_provider.add_group_member(USER_IDENTIFIER, OTHER_GRP_NAME)
 
     grp = group_provider.get_group(OTHER_GRP_NAME)
-    assert isinstance(grp, SAMLGroup)
+    assert isinstance(grp, SQLGroup)
     assert grp.name == OTHER_GRP_NAME
     members = list(grp.get_members())
     assert len(members) == 1
@@ -207,7 +204,7 @@ def test_remove_group_member(group_provider):
     """
     group_provider.remove_group_member(USER_IDENTIFIER, GRP_NAME)
     grp = group_provider.get_group(GRP_NAME)
-    assert isinstance(grp, SAMLGroup)
+    assert isinstance(grp, SQLGroup)
     assert grp.name == GRP_NAME
     members = list(grp.get_members())
     assert not members
@@ -221,7 +218,7 @@ def test_remove_group_member_user_non_existing(group_provider):
     """
     group_provider.remove_group_member(NOT_EXISTING_USER_IDENTIFIER, GRP_NAME)
     grp = group_provider.get_group(GRP_NAME)
-    assert isinstance(grp, SAMLGroup)
+    assert isinstance(grp, SQLGroup)
     assert grp.name == GRP_NAME
     members = list(grp.get_members())
     assert len(members) == 1

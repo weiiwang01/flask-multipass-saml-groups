@@ -7,13 +7,15 @@ from typing import Dict, Iterable, Optional
 
 from flask_multipass import (
     AuthInfo,
+    Group,
     IdentityInfo,
     IdentityProvider,
     IdentityRetrievalFailed,
     Multipass,
 )
 
-from flask_multipass_saml_groups.group_provider import SQLGroupProvider
+from flask_multipass_saml_groups.group_provider.base import GroupProvider
+from flask_multipass_saml_groups.group_provider.sql import SQLGroupProvider
 
 DEFAULT_IDENTIFIER_FIELD = "_saml_nameid_qualified"
 
@@ -27,9 +29,15 @@ class SAMLGroupsIdentityProvider(IdentityProvider):
     #: If the provider also provides groups and membership information
     supports_groups = True
 
-    group_class = SQLGroupProvider.group_class
+    group_class = Group
 
-    def __init__(self, multipass: Multipass, name: str, settings: Dict):
+    def __init__(
+        self,
+        multipass: Multipass,
+        name: str,
+        settings: Dict,
+        group_provider_class=SQLGroupProvider,
+    ):
         """Provide the identity provider.
 
         Args:
@@ -40,7 +48,8 @@ class SAMLGroupsIdentityProvider(IdentityProvider):
         """
         super().__init__(multipass=multipass, name=name, settings=settings)
         self.id_field = self.settings.setdefault("identifier_field", DEFAULT_IDENTIFIER_FIELD)
-        self._groups = SQLGroupProvider(identity_provider=self)
+        self._group_provider: GroupProvider = group_provider_class(identity_provider=self)
+        self.group_class = self._group_provider.group_class
 
     def get_identity_from_auth(self, auth_info: AuthInfo) -> IdentityInfo:
         """Retrieve identity information after authentication.
@@ -65,13 +74,15 @@ class SAMLGroupsIdentityProvider(IdentityProvider):
 
         grp_names = auth_info.data.get(SAML_GRP_ATTR_NAME)
         if grp_names:
-            user_groups = self._groups.get_user_groups(identifier=identifier)
+            user_groups = self._group_provider.get_user_groups(identifier=identifier)
             for group in user_groups:
                 if group.name not in grp_names:
-                    self._groups.remove_group_member(group_name=group.name, identifier=identifier)
+                    self._group_provider.remove_group_member(
+                        group_name=group.name, identifier=identifier
+                    )
 
             for grp_name in grp_names:
-                self._groups.add_group_member(group_name=grp_name, identifier=identifier)
+                self._group_provider.add_group_member(group_name=grp_name, identifier=identifier)
 
         return identity_info
 
@@ -86,7 +97,7 @@ class SAMLGroupsIdentityProvider(IdentityProvider):
             group: An instance of group_class or None if the group does not exist.
 
         """
-        return self._groups.get_group(name)
+        return self._group_provider.get_group(name)
 
     def search_groups(self, name: str, exact=False) -> Iterable:
         """
@@ -102,6 +113,6 @@ class SAMLGroupsIdentityProvider(IdentityProvider):
 
         """
         compare = operator.eq if exact else operator.contains
-        for group in self._groups.get_groups():
+        for group in self._group_provider.get_groups():
             if compare(group.name, name):
                 yield group

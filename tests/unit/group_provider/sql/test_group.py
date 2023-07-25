@@ -4,23 +4,15 @@
 import pytest
 from flask import Flask
 from flask_multipass import IdentityInfo, Multipass
+from indico.core.db import db
 
-from flask_multipass_saml_groups.group_provider import SAMLGroup, SQLGroupProvider, db
+from flask_multipass_saml_groups.group_provider.sql import SQLGroup, SQLGroupProvider
 from flask_multipass_saml_groups.provider import SAMLGroupsIdentityProvider
 
 USER_IDENTIFIER = "email@email.com"
 OTHER_USER_IDENTIFIER = "other@other.com"
 GRP_NAME = "group1"
 OTHER_GRP_NAME = "other"
-
-
-@pytest.fixture(name="app")
-def app_fixture():
-    app = Flask("test")
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
-    with app.app_context():
-        db.init_app(app)
-    return app
 
 
 @pytest.fixture(name="provider")
@@ -34,12 +26,12 @@ def provider_fixture(app):
 @pytest.fixture(name="group_provider")
 def group_provider_fixture(app, provider):
     with app.app_context():
-        yield SQLGroupProvider(app=app, identity_provider=provider)
+        yield SQLGroupProvider(identity_provider=provider)
 
 
 @pytest.fixture(name="group")
 def group_fixture(provider, app):
-    return SAMLGroup(provider=provider, name=GRP_NAME, app=app)
+    return SQLGroup(provider=provider, name=GRP_NAME)
 
 
 def test_get_members(group, group_provider):
