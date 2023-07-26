@@ -25,9 +25,13 @@ SAML_GRP_ATTR_NAME = "urn:oasis:names:tc:SAML:2.0:profiles:attribute:DCE:groups"
 class SAMLGroupsIdentityProvider(IdentityProvider):
     """Provides identity information using SAML and supports groups."""
 
+    #: If the provider supports getting identity information based from
+    #: an identifier
     supports_get = False
     #: If the provider also provides groups and membership information
     supports_groups = True
+    #: If the provider supports getting the list of groups an identity belongs to
+    supports_get_identity_groups = True
 
     group_class = Group
 
@@ -73,7 +77,12 @@ class SAMLGroupsIdentityProvider(IdentityProvider):
         identity_info = IdentityInfo(self, identifier=identifier, **auth_info.data)
 
         grp_names = auth_info.data.get(SAML_GRP_ATTR_NAME)
+
         if grp_names:
+            if isinstance(grp_names, str):
+                # If only one group is returned, it is returned as a string by saml auth provvider
+                grp_names = [grp_names]
+
             user_groups = self._group_provider.get_user_groups(identifier=identifier)
             for group in user_groups:
                 if group.name not in grp_names:
@@ -86,7 +95,7 @@ class SAMLGroupsIdentityProvider(IdentityProvider):
 
         return identity_info
 
-    def get_group(self, name: str) -> Optional:
+    def get_group(self, name: str) -> Optional[Group]:
         """
         Return a specific group.
 
@@ -99,7 +108,7 @@ class SAMLGroupsIdentityProvider(IdentityProvider):
         """
         return self._group_provider.get_group(name)
 
-    def search_groups(self, name: str, exact=False) -> Iterable:
+    def search_groups(self, name: str, exact=False) -> Iterable[Group]:
         """
         Search groups by name.
 
@@ -116,3 +125,12 @@ class SAMLGroupsIdentityProvider(IdentityProvider):
         for group in self._group_provider.get_groups():
             if compare(group.name, name):
                 yield group
+
+    def get_identity_groups(self, identifier: str) -> Iterable[Group]:
+        """Retrieve the groups a user identity belongs to
+
+        :param identifier: The unique user identifier used by the
+                           provider.
+        :return: A set of groups
+        """
+        return self._group_provider.get_user_groups(identifier=identifier)

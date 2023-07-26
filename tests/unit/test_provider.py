@@ -275,6 +275,10 @@ def test_get_group_returns_none_if_no_auth_handled(provider):
     assert group is None
 
 
+def test_get_identity_groups(provider):
+    assert False
+
+
 def test_search_groups_returns_all_matched_groups(auth_info, provider):
     """
     arrange: given AuthInfo by AuthProvider
