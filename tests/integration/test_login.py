@@ -45,6 +45,23 @@ def test_login_with_no_groups(app, multipass):
     _assert_user_only_in_groups([], app, multipass)
 
 
+def test_login_with_multiple_identical_groups(app, multipass):
+    """
+    arrange: given an app
+    act: call login with a user that has duplicate group names in the SAML attributes
+    assert: the user is logged in and the duplicate group names are not counted
+    """
+    client = app.test_client()
+
+    login(client, groups=[GRP_NAME, GRP_NAME], user_email=USER_EMAIL)
+
+    with app.app_context():
+        idp = multipass.identity_providers["ubuntu"]
+
+        grps = list(idp.get_identity_groups(USER_IDENTIFIER))
+        assert len(grps) == 1
+
+
 def _assert_user_only_in_groups(groups: List[str], app, multipass):
     with app.app_context():
         idp = multipass.identity_providers["ubuntu"]

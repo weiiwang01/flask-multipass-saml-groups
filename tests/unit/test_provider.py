@@ -44,7 +44,7 @@ def saml_attrs_grp_removed_fixture():
         "openid": "https://openid",
         "userid": USER_EMAIL,
         "username": "user",
-        SAML_GRP_ATTR_NAME: [OTHER_GRP_NAME],
+        SAML_GRP_ATTR_NAME: OTHER_GRP_NAME,  # single valued attrs are passed as lists by flask-multipass saml auth provider
     }
 
 
@@ -58,7 +58,7 @@ def saml_attrs_other_user_fixture():
         "openid": "https://openid",
         "userid": OTHER_USER_EMAIL,
         "username": "other",
-        SAML_GRP_ATTR_NAME: [OTHER_GRP_NAME],
+        SAML_GRP_ATTR_NAME: OTHER_GRP_NAME,
     }
 
 
@@ -275,8 +275,17 @@ def test_get_group_returns_none_if_no_auth_handled(provider):
     assert group is None
 
 
-def test_get_identity_groups(provider):
-    assert False
+def test_get_identity_groups(auth_info, provider):
+    """
+    arrange: given AuthInfo by AuthProvider
+    act: call get_identity_from_auth and afterwards get_identity_groups
+    assert: the returned groups of the user are the ones expected
+    """
+    provider.get_identity_from_auth(auth_info)
+    groups = list(provider.get_identity_groups(auth_info.data[DEFAULT_IDENTIFIER_FIELD]))
+
+    assert len(groups) == 2
+    assert set(g.name for g in groups) == {GRP_NAME, OTHER_GRP_NAME}
 
 
 def test_search_groups_returns_all_matched_groups(auth_info, provider):

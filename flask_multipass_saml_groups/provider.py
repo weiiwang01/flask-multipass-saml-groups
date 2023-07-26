@@ -80,7 +80,7 @@ class SAMLGroupsIdentityProvider(IdentityProvider):
 
         if grp_names:
             if isinstance(grp_names, str):
-                # If only one group is returned, it is returned as a string by saml auth provvider
+                # If only one group is returned, it is returned as a string by saml auth provider
                 grp_names = [grp_names]
 
             user_groups = self._group_provider.get_user_groups(identifier=identifier)
@@ -129,8 +129,10 @@ class SAMLGroupsIdentityProvider(IdentityProvider):
     def get_identity_groups(self, identifier: str) -> Iterable[Group]:
         """Retrieve the groups a user identity belongs to
 
-        :param identifier: The unique user identifier used by the
+        Args:
+            identifier: The unique user identifier used by the
                            provider.
-        :return: A set of groups
+        Returns:
+             iterable: An iterable of groups
         """
         return self._group_provider.get_user_groups(identifier=identifier)
