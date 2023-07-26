@@ -1,16 +1,15 @@
 #  Copyright 2023 Canonical Ltd.
 #  See LICENSE file for licensing details.
 
-from unittest.mock import Mock
+"""Unit tests for the sql group provider."""
 
 import pytest
-from flask import Flask
 from flask_multipass import IdentityProvider, Multipass
 from indico.core.db import db
 
 from flask_multipass_saml_groups.group_provider.sql import SQLGroup, SQLGroupProvider
 from flask_multipass_saml_groups.models.saml_groups import SAMLGroup as DBGroup
-from flask_multipass_saml_groups.models.saml_groups import SAMLUser, group_members_table
+from flask_multipass_saml_groups.models.saml_groups import SAMLUser
 
 USER_IDENTIFIER = "user1"
 OTHER_USER_IDENTIFIER = "user2"
@@ -22,24 +21,25 @@ NOT_EXISTING_GRP_NAME = "not_existing"
 
 @pytest.fixture(name="group_provider")
 def group_provider_fixture(app):
+    """Setup a group provider and place groups and users in the database."""
     with app.app_context():
         multipass = Multipass(app=app)
-        gp = SQLGroupProvider(
+        group_provider = SQLGroupProvider(
             identity_provider=IdentityProvider(
                 multipass=multipass, name="saml_groups", settings={}
             ),
         )
-        u1 = SAMLUser(identifier=USER_IDENTIFIER)
-        db.session.add(u1)
-        u2 = SAMLUser(identifier=OTHER_USER_IDENTIFIER)
-        db.session.add(u2)
-        g1 = DBGroup(name=GRP_NAME)
-        g1.members.append(u1)
-        db.session.add(g1)
-        db.session.add(DBGroup(name=OTHER_GRP_NAME))
-        db.session.commit()
+        user1 = SAMLUser(identifier=USER_IDENTIFIER)
+        db.session.add(user1)  # pylint: disable=no-member
+        user2 = SAMLUser(identifier=OTHER_USER_IDENTIFIER)
+        db.session.add(user2)  # pylint: disable=no-member
+        grp1 = DBGroup(name=GRP_NAME)
+        grp1.members.append(user1)
+        db.session.add(grp1)  # pylint: disable=no-member
+        db.session.add(DBGroup(name=OTHER_GRP_NAME))  # pylint: disable=no-member
+        db.session.commit()  # pylint: disable=no-member
 
-        yield gp
+        yield group_provider
 
 
 def test_get_group(group_provider):
@@ -49,6 +49,7 @@ def test_get_group(group_provider):
     assert: returns a SQLGroup instance with the same name
     """
     grp = group_provider.get_group(GRP_NAME)
+
     assert isinstance(grp, SQLGroup)
     assert grp.name == GRP_NAME
 
@@ -60,6 +61,7 @@ def test_get_group_not_found(group_provider):
     assert: returns None
     """
     grp = group_provider.get_group("non-existing")
+
     assert grp is None
 
 
@@ -70,6 +72,7 @@ def test_get_groups(group_provider):
     assert: returns a list of all groups
     """
     grps = list(group_provider.get_groups())
+
     assert grps
     assert len(grps) == 2
     assert grps[0].name == GRP_NAME
@@ -83,6 +86,7 @@ def test_get_user_groups(group_provider):
     assert: returns a list of groups the user belongs to
     """
     grps = list(group_provider.get_user_groups(USER_IDENTIFIER))
+
     assert grps
     assert len(grps) == 1
     assert grps[0].name == GRP_NAME
@@ -95,6 +99,7 @@ def test_get_user_groups_without_groups(group_provider):
     assert: returns empty list
     """
     grps = list(group_provider.get_user_groups(OTHER_USER_IDENTIFIER))
+
     assert not grps
 
 
@@ -105,6 +110,7 @@ def test_get_user_groups_for_non_existing_user(group_provider):
     assert: returns empty list
     """
     grps = list(group_provider.get_user_groups(NOT_EXISTING_USER_IDENTIFIER))
+
     assert not grps
 
 
@@ -116,6 +122,7 @@ def test_add_group(group_provider):
     """
     group_provider.add_group(NOT_EXISTING_GRP_NAME)
     grp = group_provider.get_group(NOT_EXISTING_GRP_NAME)
+
     assert isinstance(grp, SQLGroup)
     assert grp.name == NOT_EXISTING_GRP_NAME
 
@@ -141,6 +148,7 @@ def test_add_group_member(group_provider):
     assert: the user belongs to the group
     """
     group_provider.add_group_member(USER_IDENTIFIER, OTHER_GRP_NAME)
+
     grp = group_provider.get_group(OTHER_GRP_NAME)
     assert isinstance(grp, SQLGroup)
     assert grp.name == OTHER_GRP_NAME
@@ -156,6 +164,7 @@ def test_add_group_member_user_non_existing(group_provider):
     assert: the user gets created and belongs to the group
     """
     group_provider.add_group_member(NOT_EXISTING_USER_IDENTIFIER, OTHER_GRP_NAME)
+
     grp = group_provider.get_group(OTHER_GRP_NAME)
     assert isinstance(grp, SQLGroup)
     assert grp.name == OTHER_GRP_NAME
@@ -171,6 +180,7 @@ def test_add_group_member_group_non_existing(group_provider):
     assert: the group gets created and the user belongs to the group
     """
     group_provider.add_group_member(USER_IDENTIFIER, NOT_EXISTING_GRP_NAME)
+
     grp = group_provider.get_group(NOT_EXISTING_GRP_NAME)
     assert isinstance(grp, SQLGroup)
     assert grp.name == NOT_EXISTING_GRP_NAME
@@ -204,6 +214,7 @@ def test_remove_group_member(group_provider):
     """
     group_provider.remove_group_member(USER_IDENTIFIER, GRP_NAME)
     grp = group_provider.get_group(GRP_NAME)
+
     assert isinstance(grp, SQLGroup)
     assert grp.name == GRP_NAME
     members = list(grp.get_members())
@@ -218,6 +229,7 @@ def test_remove_group_member_user_non_existing(group_provider):
     """
     group_provider.remove_group_member(NOT_EXISTING_USER_IDENTIFIER, GRP_NAME)
     grp = group_provider.get_group(GRP_NAME)
+
     assert isinstance(grp, SQLGroup)
     assert grp.name == GRP_NAME
     members = list(grp.get_members())
@@ -232,5 +244,6 @@ def test_remove_group_member_group_non_existing(group_provider):
     assert: the group does not exist
     """
     group_provider.remove_group_member(USER_IDENTIFIER, NOT_EXISTING_GRP_NAME)
+
     grp = group_provider.get_group(NOT_EXISTING_GRP_NAME)
     assert not grp

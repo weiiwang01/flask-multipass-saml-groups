@@ -3,7 +3,7 @@
 #
 """SAML Groups Identity Provider."""
 import operator
-from typing import Dict, Iterable, Optional
+from typing import Dict, Iterable, Optional, Type
 
 from flask_multipass import (
     AuthInfo,
@@ -23,14 +23,20 @@ SAML_GRP_ATTR_NAME = "urn:oasis:names:tc:SAML:2.0:profiles:attribute:DCE:groups"
 
 
 class SAMLGroupsIdentityProvider(IdentityProvider):
-    """Provides identity information using SAML and supports groups."""
+    """Provides identity information using SAML and supports groups.
 
-    #: If the provider supports getting identity information based from
-    #: an identifier
+    Attrs:
+        supports_get (bool): If the provider supports getting identity information
+            based from an identifier
+        supports_groups (bool): If the provider also provides groups and membership information
+        supports_get_identity_groups (bool): If the provider supports getting the list of groups an
+         identity belongs to
+        group_class (class): The class to use for groups. Defaults to flask_multipass.Group but
+            concrete class will be used from group_provider_class
+    """
+
     supports_get = False
-    #: If the provider also provides groups and membership information
     supports_groups = True
-    #: If the provider supports getting the list of groups an identity belongs to
     supports_get_identity_groups = True
 
     group_class = Group
@@ -40,19 +46,20 @@ class SAMLGroupsIdentityProvider(IdentityProvider):
         multipass: Multipass,
         name: str,
         settings: Dict,
-        group_provider_class=SQLGroupProvider,
+        group_provider_class: Type[GroupProvider] = SQLGroupProvider,
     ):
-        """Provide the identity provider.
+        """Initialize the identity provider.
 
         Args:
             multipass: The Flask-Multipass instance
             name: The name of this identity provider instance
             settings: The settings dictionary for this identity
                              provider instance
+            group_provider_class: The class to use for the group provider.
         """
         super().__init__(multipass=multipass, name=name, settings=settings)
         self.id_field = self.settings.setdefault("identifier_field", DEFAULT_IDENTIFIER_FIELD)
-        self._group_provider: GroupProvider = group_provider_class(identity_provider=self)
+        self._group_provider = group_provider_class(identity_provider=self)
         self.group_class = self._group_provider.group_class
 
     def get_identity_from_auth(self, auth_info: AuthInfo) -> IdentityInfo:
@@ -60,6 +67,10 @@ class SAMLGroupsIdentityProvider(IdentityProvider):
 
         Args:
             auth_info: An AuthInfo instance from an auth provider.
+
+        Raise:
+            IdentityRetrievalFailed: If the identifier is missing or there do exist multiple
+                in the saml response.
 
         Returns:
             IdentityInfo: An IdentityInfo instance containing identity information
@@ -96,29 +107,26 @@ class SAMLGroupsIdentityProvider(IdentityProvider):
         return identity_info
 
     def get_group(self, name: str) -> Optional[Group]:
-        """
-        Return a specific group.
+        """Return a specific group.
 
         Args:
             name: The name of the group.
 
         Returns:
             group: An instance of group_class or None if the group does not exist.
-
         """
         return self._group_provider.get_group(name)
 
-    def search_groups(self, name: str, exact=False) -> Iterable[Group]:
-        """
-        Search groups by name.
+    def search_groups(self, name: str, exact: bool = False) -> Iterable[Group]:
+        """Search groups by name.
 
         Args:
             name: The name to search for.
             exact (bool, optional): If True, the name needs to match exactly,
                                     i.e., no substring matches are performed.
 
-        Returns:
-            iterable: An iterable of matching group_class objects.
+        Yields:
+            a matching group_class object.
 
         """
         compare = operator.eq if exact else operator.contains
@@ -127,11 +135,12 @@ class SAMLGroupsIdentityProvider(IdentityProvider):
                 yield group
 
     def get_identity_groups(self, identifier: str) -> Iterable[Group]:
-        """Retrieve the groups a user identity belongs to
+        """Retrieve the groups a user identity belongs to.
 
         Args:
             identifier: The unique user identifier used by the
                            provider.
+
         Returns:
              iterable: An iterable of groups
         """

@@ -1,5 +1,7 @@
 #  Copyright 2023 Canonical Ltd.
 #  See LICENSE file for licensing details.
+
+"""Common fixtures for integration tests."""
 import onelogin
 import pytest
 from flask import Flask
@@ -12,6 +14,7 @@ from tests.integration.common import SP_ENTITY_ID
 
 @pytest.fixture(name="config")
 def config_fixture():
+    """Return a config dict for the flask multipass plugin."""
     saml_config = {
         "sp": {
             "entityId": SP_ENTITY_ID,
@@ -67,20 +70,21 @@ def config_fixture():
     multipass_provider_map = {
         "ubuntu": "ubuntu",
     }
-    return dict(
-        MULTIPASS_AUTH_PROVIDERS=multipass_auth_providers,
-        MULTIPASS_IDENTITY_PROVIDERS=multipass_identity_providers,
-        MULTIPASS_PROVIDER_MAP=multipass_provider_map,
-    )
+    return {
+        "MULTIPASS_AUTH_PROVIDERS": multipass_auth_providers,
+        "MULTIPASS_IDENTITY_PROVIDERS": multipass_identity_providers,
+        "MULTIPASS_PROVIDER_MAP": multipass_provider_map,
+    }
 
 
 @pytest.fixture(name="app")
 def app_fixture(config):
+    """Return a properly setup flask app."""
     app = Flask("test")
     setup_sqlite(app)
     app.config.update(config)
     app.debug = True
-    app.secret_key = "fma-example"
+    app.secret_key = "fma-example"  # nosec
     app.add_url_rule("/", "index", lambda: "")
 
     return app
@@ -88,6 +92,7 @@ def app_fixture(config):
 
 @pytest.fixture(name="multipass")
 def multipass_fixture(app, monkeypatch):
+    """Return a properly setup flask multipass instance."""
     multipass = Multipass(app=app)
     multipass.register_provider(SAMLGroupsIdentityProvider, "saml_groups")
     multipass.identity_handler(lambda identity: None)

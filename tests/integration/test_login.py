@@ -1,6 +1,12 @@
 #  Copyright 2023 Canonical Ltd.
 #  See LICENSE file for licensing details.
+
+"""Integration tests which check if the groups are properly handled when a user logins."""
+
 from typing import List
+
+from flask import Flask
+from flask_multipass import Multipass
 
 from tests.integration.common import GRP_NAME, OTHER_GRP_NAME, USER_EMAIL, USER_IDENTIFIER, login
 
@@ -62,14 +68,21 @@ def test_login_with_multiple_identical_groups(app, multipass):
         assert len(grps) == 1
 
 
-def _assert_user_only_in_groups(groups: List[str], app, multipass):
+def _assert_user_only_in_groups(groups: List[str], app: Flask, multipass: Multipass):
+    """Assert that the user is only in the given groups.
+
+    Args:
+        groups: The groups the user should be in
+        app: The app
+        multipass: The multipass instance
+    """
     with app.app_context():
         idp = multipass.identity_providers["ubuntu"]
 
         grps = list(idp.get_identity_groups(USER_IDENTIFIER))
         assert len(grps) == len(groups)
 
-        for g in grps:
-            assert g.name in groups
-            assert isinstance(g, idp.group_class)
-            assert g.has_member(USER_IDENTIFIER)
+        for grp in grps:
+            assert grp.name in groups
+            assert isinstance(grp, idp.group_class)
+            assert grp.has_member(USER_IDENTIFIER)

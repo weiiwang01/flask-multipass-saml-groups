@@ -1,6 +1,8 @@
 #  Copyright 2023 Canonical Ltd.
 #  See LICENSE file for licensing details.
 
+"""Integration tests which check if the provider works as expected."""
+
 from typing import List
 
 from flask_multipass import Group, IdentityInfo
@@ -58,17 +60,28 @@ def test_search_groups(app, multipass):
 
 
 def _assert_group_methods_work(groups: List[Group]):
-    for g in groups:
-        members = list(g.get_members())
-        assert len(members) == 1
-        m = members[0]
-        assert isinstance(m, IdentityInfo)
-        assert m.identifier == USER_IDENTIFIER
+    """Assert that all the group methods work as expected.
 
-        assert g.has_member(USER_IDENTIFIER)
+    Args:
+        groups: The groups to check.
+    """
+    for grp in groups:
+        members = list(grp.get_members())
+        assert len(members) == 1
+        member = members[0]
+        assert isinstance(member, IdentityInfo)
+        assert member.identifier == USER_IDENTIFIER
+
+        assert grp.has_member(USER_IDENTIFIER)
 
 
 def _assert_group_names(groups: List[Group], expected_names: List[str]):
+    """Assert that the group names are as expected.
+
+    Args:
+        groups: The groups to check.
+        expected_names: The expected group names.
+    """
     assert len(groups) == len(expected_names)
-    for g in groups:
-        assert g.name in expected_names
+    for grp in groups:
+        assert grp.name in expected_names

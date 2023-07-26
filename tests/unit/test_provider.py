@@ -1,5 +1,8 @@
 #  Copyright 2023 Canonical Ltd.
 #  See LICENSE file for licensing details.
+
+"""Unit tests for the identity provider."""
+from copy import copy
 from unittest.mock import Mock
 
 import pytest
@@ -7,7 +10,7 @@ from flask import Flask
 from flask_multipass import AuthInfo, IdentityRetrievalFailed, Multipass
 from werkzeug.datastructures import MultiDict
 
-from flask_multipass_saml_groups.group_provider.dummy import DummyGroupProvider
+from flask_multipass_saml_groups.group_provider.memory import MemoryGroupProvider
 from flask_multipass_saml_groups.provider import (
     DEFAULT_IDENTIFIER_FIELD,
     SAML_GRP_ATTR_NAME,
@@ -22,6 +25,7 @@ OTHER_GRP_NAME = "other"
 
 @pytest.fixture(name="saml_attrs")
 def saml_attrs_fixture():
+    """SAML attributes for a user."""
     return {
         "_saml_nameid": USER_EMAIL,
         DEFAULT_IDENTIFIER_FIELD: f"{USER_EMAIL}@https://site",
@@ -34,22 +38,9 @@ def saml_attrs_fixture():
     }
 
 
-@pytest.fixture(name="saml_attrs_grp_removed")
-def saml_attrs_grp_removed_fixture():
-    return {
-        "_saml_nameid": USER_EMAIL,
-        DEFAULT_IDENTIFIER_FIELD: f"{USER_EMAIL}@https://site",
-        "email": USER_EMAIL,
-        "fullname": "Foo bar",
-        "openid": "https://openid",
-        "userid": USER_EMAIL,
-        "username": "user",
-        SAML_GRP_ATTR_NAME: OTHER_GRP_NAME,  # single valued attrs are passed as lists by flask-multipass saml auth provider
-    }
-
-
 @pytest.fixture(name="saml_attrs_other_user")
 def saml_attrs_other_user_fixture():
+    """SAML attributes for another user."""
     return {
         "_saml_nameid": OTHER_USER_EMAIL,
         DEFAULT_IDENTIFIER_FIELD: f"{OTHER_USER_EMAIL}@https://site",
@@ -64,21 +55,19 @@ def saml_attrs_other_user_fixture():
 
 @pytest.fixture(name="auth_info")
 def auth_info_fixture(saml_attrs):
+    """The AuthInfo object for a user."""
     return AuthInfo(provider=Mock(), **saml_attrs)
-
-
-@pytest.fixture(name="auth_info_grp_removed")
-def auth_info_grp_removed_fixture(saml_attrs_grp_removed):
-    return AuthInfo(provider=Mock(), **saml_attrs_grp_removed)
 
 
 @pytest.fixture(name="auth_info_other_user")
 def auth_info_other_user_fixture(saml_attrs_other_user):
+    """The AuthInfo object for another user."""
     return AuthInfo(provider=Mock(), **saml_attrs_other_user)
 
 
 @pytest.fixture(name="provider")
 def provider_fixture():
+    """Setup a SAMLGroupsIdentityProvider with a MemoryGroupProvider."""
     app = Flask("test")
     multipass = Multipass(app)
 
@@ -87,33 +76,31 @@ def provider_fixture():
             multipass=multipass,
             name="saml_groups",
             settings={},
-            group_provider_class=DummyGroupProvider,
+            group_provider_class=MemoryGroupProvider,
         )
 
 
 @pytest.fixture(name="provider_custom_field")
 def provider_custom_field_fixture():
+    """Setup a SAMLGroupsIdentityProvider with a custom identifier_field."""
     app = Flask("test")
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
-
     multipass = Multipass(app)
 
     with app.app_context():
         yield SAMLGroupsIdentityProvider(
             multipass=multipass,
             name="saml_groups",
-            settings=dict(identifier_field="fullname"),
-            group_provider_class=DummyGroupProvider,
+            settings={"identifier_field": "fullname"},
+            group_provider_class=MemoryGroupProvider,
         )
 
 
 def test_get_identity_from_auth_returns_identity_info(provider, auth_info, saml_attrs):
     """
     arrange: given AuthInfo by AuthProvider
-    act: call get_identity_from_auth from SAMLGroupsIdentityProvider
+    act: call get_identity_from_auth from identity provider
     assert: the returned IdentityInfo object contains the expected data from AuthInfo
     """
-
     identity_info = provider.get_identity_from_auth(auth_info)
 
     assert identity_info is not None
@@ -126,11 +113,10 @@ def test_get_identity_from_auth_returns_identity_from_custom_field(
     auth_info, provider_custom_field
 ):
     """
-    arrange: given AuthInfo by AuthProvider and provider using custom identifier_field
+    arrange: given AuthInfo and provider using custom identifier_field
     act: call get_identity_from_auth from SAMLGroupsIdentityProvider
     assert: the returned IdentityInfo object uses the custom field as identifier
     """
-
     identity_info = provider_custom_field.get_identity_from_auth(auth_info)
 
     assert identity_info is not None
@@ -139,9 +125,9 @@ def test_get_identity_from_auth_returns_identity_from_custom_field(
 
 def test_get_identity_from_auth_returns_identity_from_list(auth_info, provider_custom_field):
     """
-    arrange: given AuthInfo by AuthProvider and provider using one element list value for identifier_field
+    arrange: given AuthInfo using a one element list for identifier_field
     act: call get_identity_from_auth from SAMLGroupsIdentityProvider
-    assert: the returned IdentityInfo object uses the custom field as identifier
+    assert: the returned IdentityInfo object uses value from the list as identifier
     """
     auth_info.data["fullname"] = ["foo"]
 
@@ -155,11 +141,10 @@ def test_get_identity_from_auth_raises_exc_for_multi_val_identifier(
     auth_info, provider_custom_field
 ):
     """
-    arrange: given AuthInfo by AuthProvider and provider using custom identifier_field with multiple values
+    arrange: given AuthInfo using identifier_field with multiple values
     act: call get_identity_from_auth from SAMLGroupsIdentityProvider
     assert: an exception is raised
     """
-
     auth_info.data["fullname"] = ["foo", "bar"]
 
     with pytest.raises(IdentityRetrievalFailed):
@@ -168,11 +153,10 @@ def test_get_identity_from_auth_raises_exc_for_multi_val_identifier(
 
 def test_get_identity_from_auth_raises_exc_for_no_identifier(auth_info, provider):
     """
-    arrange: given AuthInfo by AuthProvider and provider does not provide value for identifier field
+    arrange: given AuthInfo which does not provide value for identifier field
     act: call get_identity_from_auth from SAMLGroupsIdentityProvider
     assert: an exception is raised
     """
-
     del auth_info.data[DEFAULT_IDENTIFIER_FIELD]
 
     with pytest.raises(IdentityRetrievalFailed):
@@ -203,7 +187,7 @@ def test_get_identity_from_auth_adds_user_to_existing_group(
 ):
     """
     arrange: given AuthInfo of two users by AuthProvider
-    act: call get_identity_from_auth from SAMLGroupsIdentityProvider twice and second time with another user
+    act: call get_identity_from_auth twice and second time with another user
     assert: the user is added to the existing group
     """
     provider.get_identity_from_auth(auth_info)
@@ -225,12 +209,10 @@ def test_get_identity_from_auth_adds_user_to_existing_group(
     assert members[1].identifier in expected_identifiers
 
 
-def test_get_identity_from_auth_removes_user_from_group(
-    auth_info, auth_info_grp_removed, provider
-):
+def test_get_identity_from_auth_removes_user_from_group(auth_info, provider):
     """
     arrange: given AuthInfo by AuthProvider
-    act: call get_identity_from_auth from SAMLGroupsIdentityProvider and afterwards again with a group removed
+    act: call get_identity_from_auth and afterwards again with a group removed
     assert: the user is removed from the group
     """
     provider.get_identity_from_auth(auth_info)
@@ -240,6 +222,8 @@ def test_get_identity_from_auth_removes_user_from_group(
     assert members
     assert members[0].identifier == auth_info.data[DEFAULT_IDENTIFIER_FIELD]
 
+    auth_info_grp_removed = copy(auth_info)
+    auth_info_grp_removed.data[SAML_GRP_ATTR_NAME] = OTHER_GRP_NAME
     provider.get_identity_from_auth(auth_info_grp_removed)
 
     group = provider.get_group(GRP_NAME)
@@ -255,7 +239,7 @@ def test_get_identity_from_auth_removes_user_from_group(
 def test_get_group_returns_specific_group(auth_info, provider):
     """
     arrange: given AuthInfo by AuthProvider
-    act: call get_identity_from_auth and afterwards get_group from SAMLGroupsIdentityProvider with a specific group name
+    act: call get_identity_from_auth and afterwards get_group with a specific group name
     assert: the returned group name is the one requested
     """
     provider.get_identity_from_auth(auth_info)
@@ -266,7 +250,7 @@ def test_get_group_returns_specific_group(auth_info, provider):
 
 def test_get_group_returns_none_if_no_auth_handled(provider):
     """
-    arrange: given only an AuthProvider whose methods have never been called
+    arrange: given only an SAMLGroupsIdentityProvider whose methods have never been called
     act: call get_group from SAMLGroupsIdentityProvider with a specific group name
     assert: the result is None
     """
@@ -291,7 +275,7 @@ def test_get_identity_groups(auth_info, provider):
 def test_search_groups_returns_all_matched_groups(auth_info, provider):
     """
     arrange: given AuthInfo by AuthProvider
-    act: call get_identity_from_auth and afterwards search_groups from SAMLGroupsIdentityProvider
+    act: call get_identity_from_auth and afterwards search_groups
     assert: the returned list of groups contains all the groups the user belongs to
     """
     provider.get_identity_from_auth(auth_info)
@@ -304,7 +288,7 @@ def test_search_groups_returns_all_matched_groups(auth_info, provider):
 def test_search_groups_non_exact_returns_all_matched_groups(auth_info, provider):
     """
     arrange: given AuthInfo by AuthProvider
-    act: call get_identity_from_auth and afterwards search_groups using exact=False from SAMLGroupsIdentityProvider
+    act: call get_identity_from_auth and afterwards search_groups using exact=False
     assert: the returned list of groups contains all the groups the user belongs to
     """
     provider.get_identity_from_auth(auth_info)

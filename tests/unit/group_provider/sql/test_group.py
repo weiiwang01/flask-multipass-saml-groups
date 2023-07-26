@@ -1,10 +1,10 @@
 #  Copyright 2023 Canonical Ltd.
 #  See LICENSE file for licensing details.
 
+"""Unit tests for the sql group."""
+
 import pytest
-from flask import Flask
 from flask_multipass import IdentityInfo, Multipass
-from indico.core.db import db
 
 from flask_multipass_saml_groups.group_provider.sql import SQLGroup, SQLGroupProvider
 from flask_multipass_saml_groups.provider import SAMLGroupsIdentityProvider
@@ -17,20 +17,21 @@ OTHER_GRP_NAME = "other"
 
 @pytest.fixture(name="provider")
 def provider_fixture(app):
+    """Create an identity provider"""
     multipass = Multipass(app)
     with app.app_context():
-        provider = SAMLGroupsIdentityProvider(multipass=multipass, name="saml_groups", settings={})
-    return provider
+        yield SAMLGroupsIdentityProvider(multipass=multipass, name="saml_groups", settings={})
 
 
 @pytest.fixture(name="group_provider")
-def group_provider_fixture(app, provider):
-    with app.app_context():
-        yield SQLGroupProvider(identity_provider=provider)
+def group_provider_fixture(provider):
+    """Create a group provider"""
+    return SQLGroupProvider(identity_provider=provider)
 
 
 @pytest.fixture(name="group")
-def group_fixture(provider, app):
+def group_fixture(provider):
+    """Create a group"""
     return SQLGroup(provider=provider, name=GRP_NAME)
 
 
@@ -66,7 +67,7 @@ def test_get_members_returns_empty_list(group, group_provider):
     assert not members
 
 
-def test_get_members_returns_empty_list_for_non_existing_group(group, group_provider):
+def test_get_members_returns_empty_list_for_non_existing_group(group):
     """
     arrange: given no underlying db group
     act: call get_members
@@ -98,7 +99,7 @@ def test_has_member_returns_false(group, group_provider):
     assert not group.has_member(OTHER_USER_IDENTIFIER)
 
 
-def test_has_member_returns_false_for_non_existing_group(group, group_provider):
+def test_has_member_returns_false_for_non_existing_group(group):
     """
     arrange: given no underlying db group
     act: call has_member
