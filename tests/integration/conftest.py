@@ -2,6 +2,8 @@
 #  See LICENSE file for licensing details.
 
 """Common fixtures for integration tests."""
+from secrets import token_hex
+
 import onelogin
 import pytest
 from flask import Flask
@@ -9,7 +11,7 @@ from flask_multipass import Multipass
 
 from flask_multipass_saml_groups.provider import SAMLGroupsIdentityProvider
 from tests.common import setup_sqlite
-from tests.integration.common import SP_ENTITY_ID
+from tests.integration.common import SP_ENTITY_ID, User
 
 
 @pytest.fixture(name="config")
@@ -101,3 +103,11 @@ def multipass_fixture(app, monkeypatch):
     )  # disable signature validation of SAML response
 
     return multipass
+
+
+@pytest.fixture(name="user")
+def user_fixture():
+    """Return a user email and identifier."""
+    user_email = token_hex(16)
+    user_identifier = f"{user_email}@{SP_ENTITY_ID}"
+    return User(email=user_email, identifier=user_identifier)

@@ -3,6 +3,7 @@
 """Common functions for integration tests."""
 
 import base64
+from collections import namedtuple
 from typing import List
 
 from flask.testing import FlaskClient
@@ -10,10 +11,8 @@ from flask.testing import FlaskClient
 from flask_multipass_saml_groups.provider import SAML_GRP_ATTR_NAME
 
 SP_ENTITY_ID = "http://localhost"
-GRP_NAME = "group1"
-OTHER_GRP_NAME = "other"
-USER_EMAIL = "foo.bar@localhost"
-USER_IDENTIFIER = f"{USER_EMAIL}@{SP_ENTITY_ID}"
+
+User = namedtuple("User", ["email", "identifier"])
 
 
 def mk_saml_response(groups: List[str], user_email: str):

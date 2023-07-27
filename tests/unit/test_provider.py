@@ -3,6 +3,7 @@
 
 """Unit tests for the identity provider."""
 from copy import copy
+from secrets import token_hex
 from unittest.mock import Mock
 
 import pytest
@@ -19,13 +20,20 @@ from tests.common import setup_sqlite
 
 USER_EMAIL = "user@example.com"
 OTHER_USER_EMAIL = "other@example.com"
-GRP_NAME = "group1"
-OTHER_GRP_NAME = "other"
+
+
+@pytest.fixture(name="group_names")
+def group_names_fixture():
+    """A list of group names."""
+    return [token_hex(16), token_hex(16)]
 
 
 @pytest.fixture(name="saml_attrs")
-def saml_attrs_fixture():
-    """SAML attributes for a user."""
+def saml_attrs_fixture(group_names):
+    """SAML attributes for a user.
+
+    The user belongs to all groups.
+    """
     return {
         "_saml_nameid": USER_EMAIL,
         DEFAULT_IDENTIFIER_FIELD: f"{USER_EMAIL}@https://site",
@@ -34,13 +42,16 @@ def saml_attrs_fixture():
         "openid": "https://openid",
         "userid": USER_EMAIL,
         "username": "user",
-        SAML_GRP_ATTR_NAME: [GRP_NAME, OTHER_GRP_NAME],
+        SAML_GRP_ATTR_NAME: group_names,
     }
 
 
 @pytest.fixture(name="saml_attrs_other_user")
-def saml_attrs_other_user_fixture():
-    """SAML attributes for another user."""
+def saml_attrs_other_user_fixture(group_names):
+    """SAML attributes for another user.
+
+    This user belongs only to the second group.
+    """
     return {
         "_saml_nameid": OTHER_USER_EMAIL,
         DEFAULT_IDENTIFIER_FIELD: f"{OTHER_USER_EMAIL}@https://site",
@@ -49,7 +60,7 @@ def saml_attrs_other_user_fixture():
         "openid": "https://openid",
         "userid": OTHER_USER_EMAIL,
         "username": "other",
-        SAML_GRP_ATTR_NAME: OTHER_GRP_NAME,
+        SAML_GRP_ATTR_NAME: group_names[1],  # single elements are expected as str
     }
 
 
@@ -126,12 +137,13 @@ def test_get_identity_from_auth_returns_identity_from_list(auth_info, provider_c
     act: call get_identity_from_auth from SAMLGroupsIdentityProvider
     assert: the returned IdentityInfo object uses value from the list as identifier
     """
-    auth_info.data["fullname"] = ["foo"]
+    fullname = token_hex(10)
+    auth_info.data["fullname"] = [fullname]
 
     identity_info = provider_custom_field.get_identity_from_auth(auth_info)
 
     assert identity_info is not None
-    assert identity_info.identifier == "foo"
+    assert identity_info.identifier == fullname
 
 
 def test_get_identity_from_auth_raises_exc_for_multi_val_identifier(
@@ -142,7 +154,9 @@ def test_get_identity_from_auth_raises_exc_for_multi_val_identifier(
     act: call get_identity_from_auth from SAMLGroupsIdentityProvider
     assert: an exception is raised
     """
-    auth_info.data["fullname"] = ["foo", "bar"]
+    fullnames = [token_hex(10), token_hex(15)]
+
+    auth_info.data["fullname"] = fullnames
 
     with pytest.raises(IdentityRetrievalFailed):
         provider_custom_field.get_identity_from_auth(auth_info)
@@ -160,7 +174,7 @@ def test_get_identity_from_auth_raises_exc_for_no_identifier(auth_info, provider
         provider.get_identity_from_auth(auth_info)
 
 
-def test_get_identity_from_auth_adds_user_to_group(auth_info, provider):
+def test_get_identity_from_auth_adds_user_to_group(auth_info, provider, group_names):
     """
     arrange: given AuthInfo by AuthProvider
     act: call get_identity_from_auth from SAMLGroupsIdentityProvider
@@ -168,19 +182,15 @@ def test_get_identity_from_auth_adds_user_to_group(auth_info, provider):
     """
     provider.get_identity_from_auth(auth_info)
 
-    group = provider.get_group(GRP_NAME)
-    members = list(group.get_members())
-    assert members
-    assert members[0].identifier == auth_info.data[DEFAULT_IDENTIFIER_FIELD]
-
-    group = provider.get_group(OTHER_GRP_NAME)
-    members = list(group.get_members())
-    assert members
-    assert members[0].identifier == auth_info.data[DEFAULT_IDENTIFIER_FIELD]
+    for grp_name in group_names:
+        group = provider.get_group(grp_name)
+        members = list(group.get_members())
+        assert members
+        assert members[0].identifier == auth_info.data[DEFAULT_IDENTIFIER_FIELD]
 
 
 def test_get_identity_from_auth_adds_user_to_existing_group(
-    auth_info, auth_info_other_user, provider
+    auth_info, auth_info_other_user, provider, group_names
 ):
     """
     arrange: given AuthInfo of two users by AuthProvider
@@ -190,12 +200,12 @@ def test_get_identity_from_auth_adds_user_to_existing_group(
     provider.get_identity_from_auth(auth_info)
     provider.get_identity_from_auth(auth_info_other_user)
 
-    group = provider.get_group(GRP_NAME)
+    group = provider.get_group(group_names[0])
     members = list(group.get_members())
     assert members
     assert members[0].identifier == auth_info.data[DEFAULT_IDENTIFIER_FIELD]
 
-    group = provider.get_group(OTHER_GRP_NAME)
+    group = provider.get_group(group_names[1])
     members = list(group.get_members())
     assert len(members) == 2
     expected_identifiers = {
@@ -206,7 +216,7 @@ def test_get_identity_from_auth_adds_user_to_existing_group(
     assert members[1].identifier in expected_identifiers
 
 
-def test_get_identity_from_auth_removes_user_from_group(auth_info, provider):
+def test_get_identity_from_auth_removes_user_from_group(auth_info, provider, group_names):
     """
     arrange: given AuthInfo by AuthProvider
     act: call get_identity_from_auth and afterwards again with a group removed
@@ -214,49 +224,49 @@ def test_get_identity_from_auth_removes_user_from_group(auth_info, provider):
     """
     provider.get_identity_from_auth(auth_info)
 
-    group = provider.get_group(GRP_NAME)
+    group = provider.get_group(group_names[0])
     members = list(group.get_members())
     assert members
     assert members[0].identifier == auth_info.data[DEFAULT_IDENTIFIER_FIELD]
 
     auth_info_grp_removed = copy(auth_info)
-    auth_info_grp_removed.data[SAML_GRP_ATTR_NAME] = OTHER_GRP_NAME
+    auth_info_grp_removed.data[SAML_GRP_ATTR_NAME] = group_names[1]
     provider.get_identity_from_auth(auth_info_grp_removed)
 
-    group = provider.get_group(GRP_NAME)
+    group = provider.get_group(group_names[0])
     members = list(group.get_members())
     assert not members
 
-    group = provider.get_group(OTHER_GRP_NAME)
+    group = provider.get_group(group_names[1])
     members = list(group.get_members())
     assert members
     assert members[0].identifier == auth_info.data[DEFAULT_IDENTIFIER_FIELD]
 
 
-def test_get_group_returns_specific_group(auth_info, provider):
+def test_get_group_returns_specific_group(auth_info, provider, group_names):
     """
     arrange: given AuthInfo by AuthProvider
     act: call get_identity_from_auth and afterwards get_group with a specific group name
     assert: the returned group name is the one requested
     """
     provider.get_identity_from_auth(auth_info)
-    group = provider.get_group(GRP_NAME)
+    group = provider.get_group(group_names[0])
 
-    assert group.name == GRP_NAME
+    assert group.name == group_names[0]
 
 
-def test_get_group_returns_none_if_no_auth_handled(provider):
+def test_get_group_returns_none_if_no_auth_handled(provider, group_names):
     """
     arrange: given only an SAMLGroupsIdentityProvider whose methods have never been called
     act: call get_group from SAMLGroupsIdentityProvider with a specific group name
     assert: the result is None
     """
-    group = provider.get_group(GRP_NAME)
+    group = provider.get_group(group_names[0])
 
     assert group is None
 
 
-def test_get_identity_groups(auth_info, provider):
+def test_get_identity_groups(auth_info, provider, group_names):
     """
     arrange: given AuthInfo by AuthProvider
     act: call get_identity_from_auth and afterwards get_identity_groups
@@ -266,30 +276,30 @@ def test_get_identity_groups(auth_info, provider):
     groups = list(provider.get_identity_groups(auth_info.data[DEFAULT_IDENTIFIER_FIELD]))
 
     assert len(groups) == 2
-    assert set(g.name for g in groups) == {GRP_NAME, OTHER_GRP_NAME}
+    assert set(g.name for g in groups) == set(group_names)
 
 
-def test_search_groups_returns_all_matched_groups(auth_info, provider):
+def test_search_groups_returns_all_matched_groups(auth_info, provider, group_names):
     """
     arrange: given AuthInfo by AuthProvider
     act: call get_identity_from_auth and afterwards search_groups
     assert: the returned list of groups contains all the groups the user belongs to
     """
     provider.get_identity_from_auth(auth_info)
-    groups = list(provider.search_groups(GRP_NAME, exact=True))
+    groups = list(provider.search_groups(group_names[0], exact=True))
 
     assert len(groups) == 1
-    assert groups[0].name == GRP_NAME
+    assert groups[0].name == group_names[0]
 
 
-def test_search_groups_non_exact_returns_all_matched_groups(auth_info, provider):
+def test_search_groups_non_exact_returns_all_matched_groups(auth_info, provider, group_names):
     """
     arrange: given AuthInfo by AuthProvider
     act: call get_identity_from_auth and afterwards search_groups using exact=False
     assert: the returned list of groups contains all the groups the user belongs to
     """
     provider.get_identity_from_auth(auth_info)
-    groups = list(provider.search_groups(GRP_NAME[:-1], exact=False))
+    groups = list(provider.search_groups(group_names[0][:-1], exact=False))
 
     assert len(groups) == 1
-    assert groups[0].name == GRP_NAME
+    assert groups[0].name == group_names[0]
