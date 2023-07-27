@@ -51,8 +51,8 @@ class SAMLUser(db.Model):  # pylint: disable=too-few-public-methods
     """The model containing the user identifiers.
 
     Attrs:
-        id: The user's ID
-        identifier: The user's identifier
+        id: The user's ID in the database
+        identifier: The user's identifier from the identity provider
         groups: The groups the user is a member of
     """
 

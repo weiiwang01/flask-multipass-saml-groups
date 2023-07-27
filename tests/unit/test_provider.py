@@ -10,12 +10,12 @@ from flask import Flask
 from flask_multipass import AuthInfo, IdentityRetrievalFailed, Multipass
 from werkzeug.datastructures import MultiDict
 
-from flask_multipass_saml_groups.group_provider.memory import MemoryGroupProvider
 from flask_multipass_saml_groups.provider import (
     DEFAULT_IDENTIFIER_FIELD,
     SAML_GRP_ATTR_NAME,
     SAMLGroupsIdentityProvider,
 )
+from tests.common import setup_sqlite
 
 USER_EMAIL = "user@example.com"
 OTHER_USER_EMAIL = "other@example.com"
@@ -67,17 +67,13 @@ def auth_info_other_user_fixture(saml_attrs_other_user):
 
 @pytest.fixture(name="provider")
 def provider_fixture():
-    """Setup a SAMLGroupsIdentityProvider with a MemoryGroupProvider."""
+    """Setup a SAMLGroupsIdentityProvider."""
     app = Flask("test")
     multipass = Multipass(app)
 
+    setup_sqlite(app)
     with app.app_context():
-        yield SAMLGroupsIdentityProvider(
-            multipass=multipass,
-            name="saml_groups",
-            settings={},
-            group_provider_class=MemoryGroupProvider,
-        )
+        yield SAMLGroupsIdentityProvider(multipass=multipass, name="saml_groups", settings={})
 
 
 @pytest.fixture(name="provider_custom_field")
@@ -86,12 +82,13 @@ def provider_custom_field_fixture():
     app = Flask("test")
     multipass = Multipass(app)
 
+    setup_sqlite(app)
+
     with app.app_context():
         yield SAMLGroupsIdentityProvider(
             multipass=multipass,
             name="saml_groups",
             settings={"identifier_field": "fullname"},
-            group_provider_class=MemoryGroupProvider,
         )
 
 
