@@ -60,8 +60,10 @@ Indico plugins.
 
 
 ### Identity provider configuration
-The configuration is almost identical to the SAML Identity Provider in Flask-Multipass,
-but you should use the type `saml_groups` instead of `saml`.
+The configuration is almost identical to the SAML identity provider in Flask-Multipass,
+but you should use the type `saml_groups` instead of `saml`. The identity provider must be used
+together with the SAML auth Provider, in order to receive the SAML groups in the authentication
+data.
 
 The following is an example section in `indico.conf`:
 ```python
