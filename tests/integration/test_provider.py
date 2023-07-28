@@ -12,7 +12,7 @@ from tests.integration.common import login
 
 def test_get_group(app, multipass, user):
     """
-    arrange: given a logged in user which is a member of a group
+    arrange: given a logged-in user which is a member of a group
     act: call get_group on identity provider
     assert: the group is returned and group methods work as expected
     """
@@ -28,7 +28,7 @@ def test_get_group(app, multipass, user):
 
 def test_get_identity_groups(app, multipass, user):
     """
-    arrange: given a logged in user which is a member of multiple group
+    arrange: given a logged-in user which is a member of multiple group
     act: call get_identity_groups on identity provider
     assert: the groups of the user are returned and group methods work as expected
     """
@@ -47,7 +47,7 @@ def test_get_identity_groups(app, multipass, user):
 
 def test_search_groups(app, multipass, user):
     """
-    arrange: given a logged in user which is a member of a group
+    arrange: given a logged-in user which is a member of a group
     act: call search_groups on identity provider
     assert: only the matched groups of the user are returned and group methods work as expected
     """

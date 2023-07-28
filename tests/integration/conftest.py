@@ -94,9 +94,10 @@ def app_fixture(config):
 
 @pytest.fixture(name="multipass")
 def multipass_fixture(app, monkeypatch):
-    """Return a properly setup flask multipass instance."""
-    multipass = Multipass(app=app)
+    """Return a properly set up flask multipass instance."""
+    multipass = Multipass()
     multipass.register_provider(SAMLGroupsIdentityProvider, "saml_groups")
+    multipass.init_app(app)
     multipass.identity_handler(lambda identity: None)
     monkeypatch.setattr(
         onelogin.saml2.response.OneLogin_Saml2_Response, "is_valid", lambda *args, **kwargs: True
